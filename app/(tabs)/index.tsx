@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,22 @@ import {
   Dimensions,
   StatusBar,
 } from "react-native";
+import DropDownPicker from "react-native-dropdown-picker";
 import { FlashList } from "@shopify/flash-list";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import { getAllPlayers, saveNewPlayer } from "@/utils/storage";
+import { Player, initialPlayers } from "@/data/initialPlayers";
 
 export default BaseballField = () => {
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(null);
+  const [items, setItems] = useState([
+    { label: "Apple", value: "apple" },
+    { label: "Banana", value: "banana" },
+  ]);
   const [positions, setPositions] = useState({
     pitcher: "John",
     catcher: "Mike",
@@ -22,74 +34,31 @@ export default BaseballField = () => {
     centerField: "Lisa",
     rightField: "Mark",
   });
-  const [players, setPlayers] = useState([
-    {
-      name: "Staubli",
-      number: 99,
-      fav_position: "P",
-      current_position: "P",
-    },
-    {
-      name: "Fellows",
-      number: 44,
-      fav_position: "C",
-      current_position: "",
-    },
-    {
-      name: "Carpenter",
-      number: 2,
-      fav_position: "1B",
-      current_position: "",
-    },
-    {
-      name: "Bradley",
-      number: 13,
-      fav_position: "2B",
-      current_position: "",
-    },
-    {
-      name: "Avrit",
-      number: 18,
-      fav_position: "3B",
-      current_position: "",
-    },
-    {
-      name: "Lima",
-      number: 3,
-      fav_position: "SS",
-      current_position: "",
-    },
-    {
-      name: "Anthamatten",
-      number: 7,
-      fav_position: "LF",
-      current_position: "",
-    },
-    {
-      name: "Meredith",
-      number: 33,
-      fav_position: "CF",
-      current_position: "",
-    },
-    {
-      name: "Caruth",
-      number: 11,
-      fav_position: "RF",
-      current_position: "",
-    },
-    {
-      name: "Rivera",
-      number: 27,
-      fav_position: "1B",
-      current_position: "",
-    },
-    {
-      name: "Armstrong",
-      number: 77,
-      fav_position: "2B",
-      current_position: "",
-    },
-  ]);
+
+  const loadPlayers = useCallback(async () => {
+    setIsLoading(true);
+    let storedPlayers = await getAllPlayers();
+
+    if (storedPlayers.length === 0) {
+      for (const player of initialPlayers) {
+        await saveNewPlayer(player);
+      }
+      storedPlayers = initialPlayers;
+    }
+
+    setPlayers(storedPlayers);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadPlayers();
+  }, [loadPlayers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPlayers();
+    }, [loadPlayers])
+  );
 
   const { width, height } = Dimensions.get("window");
   const fieldHeight = height * 0.5; // 50% of screen height
@@ -115,7 +84,7 @@ export default BaseballField = () => {
         style={{ flex: 0, backgroundColor: "#038934" }}
       />
       <SafeAreaView
-        edges={["left", "right", "bottom"]}
+        edges={["left", "right"]}
         style={{
           flex: 1,
           backgroundColor: "#fff",
@@ -129,7 +98,7 @@ export default BaseballField = () => {
           ]}
         >
           <Image
-            source={require("../assets/images/fields.png")}
+            source={require("../../assets/images/fields.png")}
             style={styles.fieldImage}
           />
           <View style={styles.positionsContainer}>
@@ -220,6 +189,14 @@ export default BaseballField = () => {
           style={{ ...styles.container, backgroundColor: "white", padding: 16 }}
         >
           <Text style={styles.title}>Players</Text>
+          {/* <DropDownPicker
+            open={open}
+            value={value}
+            items={items}
+            setOpen={setOpen}
+            setValue={setValue}
+            setItems={setItems}
+          /> */}
           <View
             style={{
               flexDirection: "row",
