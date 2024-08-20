@@ -15,3 +15,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
     npx expo start
    ```
+
+3. Make sure it says "Using Expo Go" in the command line. If not, press "s"
+
+4. Press i for iOS or a for Android
