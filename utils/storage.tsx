@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEY = "@players";
+const POSITIONS_STORAGE_KEY = "@positions";
 
 interface Player {
   id: number;
@@ -59,4 +60,29 @@ export const deletePlayer = async (playerId: number): Promise<boolean> => {
 
 export const getAllPlayers = async (): Promise<Player[]> => {
   return await getPlayers();
+};
+
+export const savePositions = async (
+  positions: Record<string, number | null>
+): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(
+      POSITIONS_STORAGE_KEY,
+      JSON.stringify(positions)
+    );
+  } catch (error) {
+    console.error("Error saving positions:", error);
+  }
+};
+
+export const getPositions = async (): Promise<
+  Record<string, number | null>
+> => {
+  try {
+    const positionsJson = await AsyncStorage.getItem(POSITIONS_STORAGE_KEY);
+    return positionsJson ? JSON.parse(positionsJson) : {};
+  } catch (error) {
+    console.error("Error getting positions:", error);
+    return {};
+  }
 };

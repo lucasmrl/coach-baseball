@@ -1,39 +1,56 @@
 import React, { useState, useEffect, useCallback } from "react";
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  Dimensions,
-  StatusBar,
-} from "react-native";
+import { View, Text, Image, StyleSheet, Dimensions } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { FlashList } from "@shopify/flash-list";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { getAllPlayers, saveNewPlayer } from "@/utils/storage";
+import {
+  getAllPlayers,
+  saveNewPlayer,
+  updatePlayer,
+  savePositions,
+  getPositions,
+} from "@/utils/storage";
 import { Player, initialPlayers } from "@/data/initialPlayers";
 
 export default BaseballField = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(null);
-  const [items, setItems] = useState([
-    { label: "Apple", value: "apple" },
-    { label: "Banana", value: "banana" },
-  ]);
   const [positions, setPositions] = useState({
-    pitcher: "John",
-    catcher: "Mike",
-    firstBase: "Alex",
-    secondBase: "Sarah",
-    thirdBase: "Emily",
-    shortStop: "David",
-    leftField: "Tom",
-    centerField: "Lisa",
-    rightField: "Mark",
+    pitcher: null,
+    catcher: null,
+    firstBase: null,
+    secondBase: null,
+    thirdBase: null,
+    shortStop: null,
+    leftField: null,
+    centerField: null,
+    rightField: null,
   });
+
+  const [dropdownStates, setDropdownStates] = useState({
+    pitcher: false,
+    catcher: false,
+    firstBase: false,
+    secondBase: false,
+    thirdBase: false,
+    shortStop: false,
+    leftField: false,
+    centerField: false,
+    rightField: false,
+  });
+
+  const positionAbbreviations = {
+    pitcher: "P",
+    catcher: "C",
+    firstBase: "1B",
+    secondBase: "2B",
+    thirdBase: "3B",
+    shortStop: "SS",
+    leftField: "LF",
+    centerField: "CF",
+    rightField: "RF",
+  };
 
   const loadPlayers = useCallback(async () => {
     setIsLoading(true);
@@ -60,17 +77,181 @@ export default BaseballField = () => {
     }, [loadPlayers])
   );
 
+  const loadPositionsAndPlayers = useCallback(async () => {
+    setIsLoading(true);
+    const [storedPlayers, storedPositions] = await Promise.all([
+      getAllPlayers(),
+      getPositions(),
+    ]);
+
+    if (storedPlayers.length === 0) {
+      for (const player of initialPlayers) {
+        await saveNewPlayer(player);
+      }
+      storedPlayers = initialPlayers;
+    }
+
+    setPlayers(storedPlayers);
+    setPositions((prevPositions) => ({
+      ...prevPositions,
+      ...storedPositions,
+    }));
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadPositionsAndPlayers();
+  }, [loadPositionsAndPlayers]);
+
+  const handlePlayerSelect = async (newPosition, playerId) => {
+    const updatedPositions = { ...positions };
+
+    // Clear the previous position if the player is already assigned to a position
+    let previousPosition = null;
+    for (const position in updatedPositions) {
+      if (updatedPositions[position] === playerId) {
+        previousPosition = position;
+        break;
+      }
+    }
+
+    if (previousPosition && previousPosition !== newPosition) {
+      updatedPositions[previousPosition] = null;
+      const previousPlayer = players.find((p) => p.id === playerId);
+      if (previousPlayer) {
+        await updatePlayer({
+          ...previousPlayer,
+          current_position: "",
+        });
+      }
+    }
+
+    // If the new position is "Select" (null), clear the player's current_position
+    if (playerId === null) {
+      const playerToClear = players.find(
+        (p) => p.id === updatedPositions[newPosition]
+      );
+      if (playerToClear) {
+        await updatePlayer({
+          ...playerToClear,
+          current_position: "",
+        });
+      }
+      updatedPositions[newPosition] = null; // Clear the position in the state
+    } else {
+      // Set the new position if a valid player is selected
+      updatedPositions[newPosition] = playerId;
+      const playerToUpdate = players.find((p) => p.id === playerId);
+      if (playerToUpdate) {
+        const positionAbbreviation = positionAbbreviations[newPosition];
+        await updatePlayer({
+          ...playerToUpdate,
+          current_position: positionAbbreviation,
+        });
+      }
+    }
+
+    setPositions(updatedPositions);
+    await savePositions(updatedPositions);
+
+    loadPositionsAndPlayers(); // Reload players and positions to reflect the changes
+  };
+
+  const renderDropdown = (position) => {
+    if (
+      position == "catcher" ||
+      position == "pitcher" ||
+      position == "firstBase" ||
+      position == "thirdBase"
+    ) {
+      return (
+        <DropDownPicker
+          dropDownDirection="TOP"
+          selectedItemLabelStyle={{
+            fontWeight: "bold",
+          }}
+          showArrowIcon={true}
+          placeholder="Select"
+          open={dropdownStates[position]}
+          value={positions[position]}
+          items={[
+            { label: "Select", value: null },
+            ...players.map((player) => ({
+              label: player.name,
+              value: player.id,
+            })),
+          ]}
+          setOpen={(open) =>
+            setDropdownStates((prev) => ({ ...prev, [position]: open }))
+          }
+          setValue={(callback) => {
+            setPositions((prev) => ({
+              ...prev,
+              [position]: callback(prev[position]),
+            }));
+          }}
+          onSelectItem={(item) => handlePlayerSelect(position, item.value)}
+          style={[styles.dropdown, styles[`${position}Dropdown`]]}
+          containerStyle={[
+            styles.dropdownContainer,
+            styles[`${position}Dropdown`],
+          ]}
+          zIndex={1000 - Object.keys(positions).indexOf(position)}
+        />
+      );
+    } else {
+      return (
+        <DropDownPicker
+          showArrowIcon={true}
+          selectedItemLabelStyle={{
+            fontWeight: "bold",
+          }}
+          placeholder="Select"
+          open={dropdownStates[position]}
+          value={positions[position]}
+          items={[
+            { label: "Select", value: null },
+            ...players.map((player) => ({
+              label: player.name,
+              value: player.id,
+            })),
+          ]}
+          setOpen={(open) =>
+            setDropdownStates((prev) => ({ ...prev, [position]: open }))
+          }
+          setValue={(callback) => {
+            setPositions((prev) => ({
+              ...prev,
+              [position]: callback(prev[position]),
+            }));
+          }}
+          onSelectItem={(item) => handlePlayerSelect(position, item.value)}
+          style={[styles.dropdown, styles[`${position}Dropdown`]]}
+          containerStyle={[
+            styles.dropdownContainer,
+            styles[`${position}Dropdown`],
+          ]}
+          zIndex={1000 + Object.keys(positions).indexOf(position)}
+          zIndexInverse={1000 - Object.keys(positions).indexOf(position)}
+        />
+      );
+    }
+  };
+
   const { width, height } = Dimensions.get("window");
   const fieldHeight = height * 0.5; // 50% of screen height
   const fieldWidth = width;
 
-  const playerRenderItem = ({ index, item }) => {
+  const playerRenderItem = ({ item }: { item: Player }) => {
     return (
-      <View key={index} style={[styles.listPlayers]}>
+      <View style={styles.listPlayers}>
         <Text style={{ flex: 1, fontSize: 16 }}>{item.name}</Text>
         <Text style={{ width: 60, fontSize: 16 }}>{item.number}</Text>
         <Text style={{ width: 60, fontSize: 16 }}>{item.fav_position}</Text>
-        <Text style={{ width: 60, fontSize: 16 }}>{item.current_position}</Text>
+        <Text style={{ width: 60, fontSize: 16 }}>
+          {item.current_position}
+          {item.fav_position === item.current_position && " ✅"}
+        </Text>
       </View>
     );
   };
@@ -102,101 +283,21 @@ export default BaseballField = () => {
             style={styles.fieldImage}
           />
           <View style={styles.positionsContainer}>
-            {!positions.pitcher ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.pitcher, styles.playerName]}
-              >
-                {positions.pitcher}
-              </Text>
-            )}
-            {!positions.catcher ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.catcher, styles.playerName]}
-              >
-                {positions.catcher}
-              </Text>
-            )}
-            {!positions.firstBase ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.firstBase, styles.playerName]}
-              >
-                {positions.firstBase}
-              </Text>
-            )}
-            {!positions.secondBase ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.secondBase, styles.playerName]}
-              >
-                {positions.secondBase}
-              </Text>
-            )}
-            {!positions.thirdBase ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.thirdBase, styles.playerName]}
-              >
-                {positions.thirdBase}
-              </Text>
-            )}
-            {!positions.shortStop ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.shortStop, styles.playerName]}
-              >
-                {positions.shortStop}
-              </Text>
-            )}
-            {!positions.leftField ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.leftField, styles.playerName]}
-              >
-                {positions.leftField}
-              </Text>
-            )}
-            {!positions.rightField ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.rightField, styles.playerName]}
-              >
-                {positions.rightField}
-              </Text>
-            )}
-            {!positions.centerField ? (
-              ""
-            ) : (
-              <Text
-                style={[styles.position, styles.centerField, styles.playerName]}
-              >
-                {positions.centerField}
-              </Text>
-            )}
+            {renderDropdown("pitcher")}
+            {renderDropdown("catcher")}
+            {renderDropdown("firstBase")}
+            {renderDropdown("secondBase")}
+            {renderDropdown("thirdBase")}
+            {renderDropdown("shortStop")}
+            {renderDropdown("leftField")}
+            {renderDropdown("centerField")}
+            {renderDropdown("rightField")}
           </View>
         </View>
         <View
           style={{ ...styles.container, backgroundColor: "white", padding: 16 }}
         >
           <Text style={styles.title}>Players</Text>
-          {/* <DropDownPicker
-            open={open}
-            value={value}
-            items={items}
-            setOpen={setOpen}
-            setValue={setValue}
-            setItems={setItems}
-          /> */}
           <View
             style={{
               flexDirection: "row",
@@ -240,9 +341,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingBottom: 10,
   },
-  playerName: {
-    fontWeight: "bold",
-  },
   title: {
     fontWeight: "bold",
     fontSize: 24,
@@ -258,28 +356,61 @@ const styles = StyleSheet.create({
   positionsContainer: {
     ...StyleSheet.absoluteFillObject,
   },
-  position: {
-    position: "absolute",
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    padding: 5,
-    borderRadius: 5,
-  },
-  pitcher: {
-    top: "70%",
-    left: "50%",
-    transform: [{ translateX: -25 }, { translateY: -10 }],
-  },
-  catcher: { bottom: "3%", left: "50%", transform: [{ translateX: -25 }] },
-  firstBase: { bottom: "30%", right: "20%" },
-  secondBase: { top: "45%", left: "64%", transform: [{ translateX: -25 }] },
-  thirdBase: { bottom: "30%", left: "20%" },
-  shortStop: { top: "45%", left: "28%" },
-  leftField: { top: "24%", left: "3%" },
-  centerField: { top: "12%", left: "51%", transform: [{ translateX: -25 }] },
-  rightField: { top: "24%", right: "5%" },
   separator: {
     height: 1,
-    backgroundColor: "#CED0CE", // You can customize the color
-    marginHorizontal: 2, // Optional: add margin if needed
+    backgroundColor: "#CED0CE",
+    marginHorizontal: 2,
+    marginBottom: 10,
+  },
+  dropdown: {
+    width: 120,
+    height: 40,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    borderRadius: 5,
+    borderWidth: 0,
+  },
+  dropdownContainer: {
+    width: 120,
+    position: "absolute",
+  },
+  pitcherDropdown: {
+    top: "60%",
+    left: "60%",
+    transform: [{ translateX: -60 }, { translateY: -20 }],
+  },
+  catcherDropdown: {
+    bottom: "3%",
+    left: "60%",
+    transform: [{ translateX: -60 }],
+  },
+  firstBaseDropdown: {
+    bottom: "25%",
+    right: "2%",
+  },
+  secondBaseDropdown: {
+    top: "30%",
+    left: "84%",
+    transform: [{ translateX: -60 }],
+  },
+  thirdBaseDropdown: {
+    bottom: "25%",
+    left: "2%",
+  },
+  shortStopDropdown: {
+    top: "30%",
+    left: "5%",
+  },
+  leftFieldDropdown: {
+    top: "15%",
+    left: "1%",
+  },
+  centerFieldDropdown: {
+    top: "5%",
+    left: "59%",
+    transform: [{ translateX: -60 }],
+  },
+  rightFieldDropdown: {
+    top: "15%",
+    right: "1%",
   },
 });

@@ -80,6 +80,7 @@ const Players: React.FC = () => {
           <Text style={{ width: 60, fontSize: 16 }}>{item.fav_position}</Text>
           <Text style={{ width: 60, fontSize: 16 }}>
             {item.current_position}
+            {item.fav_position === item.current_position && " ✅"}
           </Text>
         </View>
       </TouchableOpacity>
